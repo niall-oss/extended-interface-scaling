@@ -91,6 +91,15 @@ GitHub Actions builds the mod on every pull request and on merges to `master`.
 - **Pull requests** — download the `.wotmod` from the workflow run’s **Artifacts** (`wotmod-pr-{commit_sha}`).
 - **Merges to `master`** — publishes or updates a [GitHub Release](https://github.com/ANIALLATOR114/extended-interface-scaling/releases) (`v{version}`) with the built `.wotmod` attached.
 
+### Publishing to wgmods.net
+
+The mod version lives in `build.py` (`--version` default). Release tooling in `scripts/wgmods.py` runs on the latest Python via [uv](https://docs.astral.sh/uv/) (`uv run scripts/wgmods.py --help`).
+
+- **Game patches (automatic)**: the **Game patch update** workflow runs daily at 13:00 UTC. When wgmods lists a game version newer than the mod's latest update, it creates a `v{mod}+wot{game}` GitHub Release and submits the same mod version for that game version. If the mod already has the maximum number of updates (6), the oldest update is deleted first.
+- **Code changes (manual)**: bump the version in `build.py`, then merge. Then run **Actions → Publish to wgmods** and enter the version changes text. Game version defaults to the latest; `dry_run` prints the request without uploading.
+
+Both workflows authenticate with the repo secrets `WGMODS_SESSIONID` and `WGMODS_CSRFTOKEN`, which are your wgmods.net login cookies. Find them in DevTools → Application → Cookies → `https://wgmods.net`. If they stop working, the daily run opens a "wgmods session cookie expired" issue telling you to paste fresh ones.
+
 ### Decompiled reference
 
 See [docs/DECOMPILED_REFERENCE.md](docs/DECOMPILED_REFERENCE.md). Primary EU reference branch: [StranikS-Scan/WorldOfTanks-Decompiled `2.2.1.1_EU`](https://github.com/StranikS-Scan/WorldOfTanks-Decompiled/tree/2.2.1.1_EU).
