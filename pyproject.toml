@@ -8,3 +8,15 @@ dependencies = [
 
 [tool.uv]
 package = false
+
+[dependency-groups]
+dev = [
+    "ruff>=0.17.5",
+    "ty>=0.0.107",
+]
+
+[tool.ty.src]
+include = ["scripts"]
+
+[tool.ruff]
+include = ["scripts/**/*.py"]
