@@ -1,5 +1,7 @@
 from debug_utils import LOG_NOTE
 
+from gui.extendedinterfacescaling.override_utils import override, restore
+
 MOD_LINKAGE = "extended_interface_scaling"
 SETTINGS_VERSION = 8
 
@@ -80,11 +82,10 @@ def _scaling_reference_rows():
     return rows
 
 
+_api = None
+_settings_data_override = None
 _last_cached_screen_size = None
 _refresh_callback_id = None
-_mods_window_listener_installed = False
-_settings_data_hook_installed = False
-_gui_reset_listener_installed = False
 
 
 def _get_mods_settings_api():
@@ -95,37 +96,57 @@ def _get_mods_settings_api():
     return g_modsSettingsApi
 
 
+def _get_gui_resetters():
+    try:
+        from gui import g_guiResetters
+    except ImportError:
+        return None
+    return g_guiResetters
+
+
 def refresh_mod_template(force=False):
     global _last_cached_screen_size
 
-    api = _get_mods_settings_api()
-    if api is None:
+    if _api is None:
         return False
 
     from gui.extendedinterfacescaling.display_utils import get_current_screen_size
 
     screen_size = get_current_screen_size()
-    templates_state = api.state.get("templates", {})
-    if MOD_LINKAGE not in templates_state:
+    if MOD_LINKAGE not in _api.state.get("templates", {}):
         return False
 
     if not force and _last_cached_screen_size == screen_size:
         return False
 
     _last_cached_screen_size = screen_size
-    api.state["templates"][MOD_LINKAGE] = _build_template()
-    api.saveState()
+    _api.state["templates"][MOD_LINKAGE] = _build_template()
+    _api.saveState()
     return True
+
+
+def _cancel_template_refresh():
+    global _refresh_callback_id
+
+    if _refresh_callback_id is None:
+        return
+
+    import BigWorld
+
+    BigWorld.cancelCallback(_refresh_callback_id)
+    _refresh_callback_id = None
 
 
 def schedule_template_refresh():
     global _refresh_callback_id, _last_cached_screen_size
 
+    if _api is None:
+        return
+
     import BigWorld
 
     _last_cached_screen_size = None
-    if _refresh_callback_id is not None:
-        BigWorld.cancelCallback(_refresh_callback_id)
+    _cancel_template_refresh()
     _refresh_callback_id = BigWorld.callback(0.0, _deferred_template_refresh)
 
 
@@ -148,53 +169,11 @@ def _on_gui_reset():
     schedule_template_refresh()
 
 
-def _install_mods_window_listener():
-    global _mods_window_listener_installed
-    if _mods_window_listener_installed:
-        return
-
-    api = _get_mods_settings_api()
-    if api is None:
-        return
-
-    api.onWindowOpened += _on_mods_window_opened
-    _mods_window_listener_installed = True
-
-
-def _install_settings_data_hook():
-    global _settings_data_hook_installed
-    if _settings_data_hook_installed:
-        return
-
-    api = _get_mods_settings_api()
-    if api is None:
-        return
-
-    original_generate = api.generateSettingsData
-
-    def generateSettingsData():
-        global _last_cached_screen_size
-
-        _last_cached_screen_size = None
-        refresh_mod_template(force=True)
-        return original_generate()
-
-    api.generateSettingsData = generateSettingsData
-    _settings_data_hook_installed = True
-
-
-def _install_gui_reset_listener():
-    global _gui_reset_listener_installed
-    if _gui_reset_listener_installed:
-        return
-
-    try:
-        from gui import g_guiResetters
-    except ImportError:
-        return
-
-    g_guiResetters.add(_on_gui_reset)
-    _gui_reset_listener_installed = True
+def _generate_settings_data_with_fresh_template(original):
+    # The window reads templates here, after onWindowOpened, so the deferred
+    # refresh would arrive too late for the first paint.
+    refresh_mod_template(force=True)
+    return original()
 
 
 def _build_template():
@@ -258,17 +237,23 @@ def _build_template():
 
 def _apply_settings(settings):
     from gui.extendedinterfacescaling import config
-    from gui.extendedinterfacescaling.scale_applier import apply_scale
+    from gui.extendedinterfacescaling.scale_applier import (
+        apply_scale,
+        restore_native_scale,
+    )
 
     settings = dict(settings)
 
     scale = _parse_scale(settings.get("scale", config.get_scale()))
     enabled = bool(settings.get("enabled", config.is_enabled()))
+    was_enabled = config.is_enabled()
 
     config.apply_values(scale=scale, enabled=enabled)
 
     if enabled:
         apply_scale(scale)
+    elif was_enabled:
+        restore_native_scale()
 
 
 def _on_settings_changed(linkage, settings):
@@ -278,22 +263,23 @@ def _on_settings_changed(linkage, settings):
 
 
 def _on_button_clicked(linkage, varName, value):
-    if linkage != MOD_LINKAGE or varName != "scale":
+    if linkage != MOD_LINKAGE or varName != "scale" or _api is None:
         return
 
-    api = _get_mods_settings_api()
-    if api is None:
-        return
-
-    saved = api.getModSettings(MOD_LINKAGE, _build_template())
+    saved = _api.getModSettings(MOD_LINKAGE, _build_template())
     if not saved:
         return
 
     saved["scale"] = "1.0"
-    api.updateModSettings(MOD_LINKAGE, saved)
+    _api.updateModSettings(MOD_LINKAGE, saved)
 
 
 def register_mods_settings():
+    global _api, _settings_data_override
+
+    if _api is not None:
+        return True
+
     api = _get_mods_settings_api()
     if api is None:
         LOG_NOTE(
@@ -302,13 +288,12 @@ def register_mods_settings():
         )
         return False
 
+    _api = api
     template = _build_template()
     saved = api.getModSettings(MOD_LINKAGE, template)
 
     if saved:
-        api.registerCallback(
-            MOD_LINKAGE, _on_settings_changed, _on_button_clicked
-        )
+        api.registerCallback(MOD_LINKAGE, _on_settings_changed, _on_button_clicked)
         _apply_settings(saved)
     else:
         settings = api.setModTemplate(
@@ -317,7 +302,34 @@ def register_mods_settings():
         if settings:
             _apply_settings(settings)
 
-    _install_mods_window_listener()
-    _install_settings_data_hook()
-    _install_gui_reset_listener()
+    api.onWindowOpened += _on_mods_window_opened
+    _settings_data_override = override(
+        api, "generateSettingsData", _generate_settings_data_with_fresh_template
+    )
+
+    gui_resetters = _get_gui_resetters()
+    if gui_resetters is not None:
+        gui_resetters.add(_on_gui_reset)
     return True
+
+
+def unregister_mods_settings():
+    global _api, _settings_data_override, _last_cached_screen_size
+
+    _cancel_template_refresh()
+    if _api is None:
+        return
+
+    # ModsSettings API has no unregister call; these mirror registerCallback.
+    _api.onSettingsChanged -= _on_settings_changed
+    _api.onButtonClicked -= _on_button_clicked
+    _api.onWindowOpened -= _on_mods_window_opened
+    restore(_settings_data_override)
+
+    gui_resetters = _get_gui_resetters()
+    if gui_resetters is not None:
+        gui_resetters.discard(_on_gui_reset)
+
+    _api = None
+    _settings_data_override = None
+    _last_cached_screen_size = None

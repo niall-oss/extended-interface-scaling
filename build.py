@@ -13,7 +13,7 @@ parser.add_argument(
     default="Extended Interface Scaling",
     help="Mod name",
 )
-parser.add_argument("-v", "--version", default="2.0.0", help="Mod version")
+parser.add_argument("-v", "--version", default="2.1.0", help="Mod version")
 parser.add_argument(
     "-d",
     "--description",

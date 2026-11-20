@@ -1,4 +1,4 @@
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 
 
 def init():
@@ -15,5 +15,7 @@ def init():
 
 def fini():
     from gui.extendedinterfacescaling import hooks
+    from gui.extendedinterfacescaling.mods_settings import unregister_mods_settings
 
+    unregister_mods_settings()
     hooks.uninstall()

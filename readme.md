@@ -34,6 +34,8 @@ Without ModsList/ModsSettings, the mod still works using the JSON config.
 
 When the mod is **enabled**, it overrides the in-game **Options → Graphics → Interface Scaling** setting. Configure via the mod configuration page instead.
 
+Turning the mod off and clicking **Apply** switches straight back to the game's own Interface Scaling setting, without a restart. The custom scale is kept across resolution, window mode and monitor changes.
+
 ### JSON fallback
 
 If ModsList/ModsSettings are not installed, edit the JSON config file directly:
@@ -74,22 +76,22 @@ If the Windows **py launcher** registered 2.7 during install, `py -2.7 --version
 
 ```bash
 # CMD or PowerShell
-C:\Python27\python.exe build.py --username ANIALLATOR --version 2.0.0
+C:\Python27\python.exe build.py --username ANIALLATOR --version 2.1.0
 
 # Git Bash
-/c/Python27/python.exe build.py --username ANIALLATOR --version 2.0.0
+/c/Python27/python.exe build.py --username ANIALLATOR --version 2.1.0
 ```
 
-If the py launcher knows about 2.7: `py -2.7 build.py --username ANIALLATOR --version 2.0.0`
+If the py launcher knows about 2.7: `py -2.7 build.py --username ANIALLATOR --version 2.1.0`
 
-Output: `build/ANIALLATOR.Extended_Interface_Scaling_2.0.0.wotmod`
+Output: `build/ANIALLATOR.Extended_Interface_Scaling_2.1.0.wotmod`
 
 ### CI / Releases
 
 GitHub Actions builds the mod on every pull request and on merges to `master`.
 
 - **Pull requests** — download the `.wotmod` from the workflow run’s **Artifacts** (`wotmod-pr-{commit_sha}`).
-- **Merges to `master`** — publishes or updates a [GitHub Release](https://github.com/ANIALLATOR114/extended-interface-scaling/releases) (`v{version}`) with the built `.wotmod` attached.
+- **Merges to `master`** — publishes or updates a [GitHub Release](https://github.com/niall-oss/extended-interface-scaling/releases) (`v{version}`) with the built `.wotmod` attached.
 
 ### Publishing to wgmods.net
 
@@ -100,9 +102,11 @@ The mod version lives in `build.py` (`--version` default). Release tooling in `s
 
 Both workflows authenticate with the repo secrets `WGMODS_SESSIONID` and `WGMODS_CSRFTOKEN`, which are your wgmods.net login cookies. Find them in DevTools → Application → Cookies → `https://wgmods.net`. If they stop working, the daily run opens a "wgmods session cookie expired" issue telling you to paste fresh ones.
 
+Checks run `ruff`, `ty` and the `pytest` suite in `tests/`, which tests enabling, disabling, unloading and screen changes against stand-ins for the game and ModsSettings API (`uv run pytest`).
+
 ### Decompiled reference
 
-See [docs/DECOMPILED_REFERENCE.md](docs/DECOMPILED_REFERENCE.md). Primary EU reference branch: [StranikS-Scan/WorldOfTanks-Decompiled `2.2.1.1_EU`](https://github.com/StranikS-Scan/WorldOfTanks-Decompiled/tree/2.2.1.1_EU).
+See [docs/DECOMPILED_REFERENCE.md](docs/DECOMPILED_REFERENCE.md) for the game and ModsSettings API versions the mod is written against, and how to update them for a new patch.
 
 ## Credits
 

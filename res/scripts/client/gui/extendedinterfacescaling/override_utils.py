@@ -1,26 +1,39 @@
-import types
+from debug_utils import LOG_NOTE
+
+_MISSING = object()
 
 
-def override(holder, name, wrapper=None, setter=None):
-    if wrapper is None:
-        return lambda w, s=None: override(holder, name, w, s)
+class Override(object):
+    def __init__(self, holder, name, previous, installed):
+        self.holder = holder
+        self.name = name
+        self.previous = previous
+        self.installed = installed
 
+
+def override(holder, name, wrapper):
+    previous = vars(holder).get(name, _MISSING)
     target = getattr(holder, name)
 
-    def wrapped(*a, **kw):
-        return wrapper(target, *a, **kw)
+    def wrapped(*args, **kwargs):
+        return wrapper(target, *args, **kwargs)
 
-    if not isinstance(holder, types.ModuleType) and isinstance(
-        target, types.FunctionType
-    ):
-        setattr(holder, name, staticmethod(wrapped))
-    elif isinstance(target, property):
-        prop_getter = lambda *a, **kw: wrapper(target.fget, *a, **kw)
-        prop_setter = (
-            target.fset
-            if not setter
-            else lambda *a, **kw: setter(target.fset, *a, **kw)
+    installed = staticmethod(wrapped) if isinstance(previous, staticmethod) else wrapped
+    setattr(holder, name, installed)
+    return Override(holder, name, previous, installed)
+
+
+def restore(handle):
+    # Another mod may have wrapped our wrapper; removing ours would drop theirs.
+    if vars(handle.holder).get(handle.name) is not handle.installed:
+        LOG_NOTE(
+            "Extended Interface Scaling: %s was overridden again by another mod, "
+            "leaving it in place" % handle.name
         )
-        setattr(holder, name, property(prop_getter, prop_setter, target.fdel))
+        return False
+
+    if handle.previous is _MISSING:
+        delattr(handle.holder, handle.name)
     else:
-        setattr(holder, name, wrapped)
+        setattr(handle.holder, handle.name, handle.previous)
+    return True
